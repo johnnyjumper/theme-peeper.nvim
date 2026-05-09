@@ -1,9 +1,13 @@
 local M = {}
 
-local browser_width = 36
+local browser_min_width = 34
+local browser_max_width = 54
 local browser_min_height = 10
+local browser_max_height = 24
 local browser_height_ratio = 0.7
-local browser_left_margin = 4
+local browser_preview_width = 80
+local browser_preview_gap = 3
+local browser_left_margin = 2
 local browser_zindex = 90
 local preview_delay_ms = 120
 
@@ -42,6 +46,10 @@ local function close_browser_and_preview()
 	require("theme_peeper.preview").close()
 end
 
+local function strip_row_prefix(line)
+	return line:gsub("^%s+", "")
+end
+
 local function get_selected_theme(buf)
 	local row = vim.api.nvim_win_get_cursor(0)[1]
 	local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1]
@@ -50,7 +58,7 @@ local function get_selected_theme(buf)
 		return nil
 	end
 
-	return vim.trim(line)
+	return vim.trim(strip_row_prefix(line))
 end
 
 local function browser_is_open()
@@ -104,10 +112,25 @@ local function move_cursor(buf, delta)
 	schedule_preview(get_selected_theme(buf))
 end
 
+local function display_line(theme)
+	return "  " .. theme
+end
+
+local function display_lines(themes)
+	local lines = {}
+
+	for _, theme in ipairs(themes) do
+		table.insert(lines, display_line(theme))
+	end
+
+	return lines
+end
+
 local function create_buffer(themes)
 	local buf = vim.api.nvim_create_buf(false, true)
 
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, themes)
+	vim.api.nvim_buf_set_name(buf, "Theme Peeper Browser")
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, display_lines(themes))
 
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].bufhidden = "wipe"
@@ -117,40 +140,74 @@ local function create_buffer(themes)
 	return buf
 end
 
-local function window_height(theme_count, ui_height)
-	local max_height = math.floor(ui_height * browser_height_ratio)
+local function longest_theme_width(themes)
+	local width = 0
 
-	return math.min(theme_count, math.max(browser_min_height, max_height))
+	for _, theme in ipairs(themes) do
+		width = math.max(width, vim.fn.strdisplaywidth(theme))
+	end
+
+	return width
 end
 
-local function window_config(theme_count)
+local function window_width(themes, ui_width)
+	local content_width = longest_theme_width(themes) + 4
+	local screen_width = math.floor(ui_width * 0.35)
+	local max_width = math.min(browser_max_width, math.max(browser_min_width, screen_width))
+
+	return math.min(math.max(browser_min_width, content_width), max_width)
+end
+
+local function window_height(theme_count, ui_height)
+	local screen_height = math.floor(ui_height * browser_height_ratio)
+	local max_height = math.min(browser_max_height, math.max(browser_min_height, screen_height))
+
+	return math.min(theme_count, max_height)
+end
+
+local function preview_left_col(ui_width)
+	return math.floor((ui_width - browser_preview_width) / 2)
+end
+
+local function window_col(width, ui_width)
+	local left_of_preview = preview_left_col(ui_width) - width - browser_preview_gap
+
+	return math.max(browser_left_margin, left_of_preview)
+end
+
+local function window_config(themes)
 	local ui = vim.api.nvim_list_uis()[1]
-	local height = window_height(theme_count, ui.height)
+	local width = window_width(themes, ui.width)
+	local height = window_height(#themes, ui.height)
 
 	return {
 		relative = "editor",
-		width = browser_width,
+		width = width,
 		height = height,
-		col = browser_left_margin,
+		col = window_col(width, ui.width),
 		row = math.floor((ui.height - height) / 2),
 		style = "minimal",
 		border = "rounded",
-		title = " Themes ",
+		title = " Theme Peeper ",
 		title_pos = "center",
 		zindex = browser_zindex,
 	}
 end
 
-local function open_window(buf, theme_count)
-	return vim.api.nvim_open_win(buf, true, window_config(theme_count))
+local function open_window(buf, themes)
+	return vim.api.nvim_open_win(buf, true, window_config(themes))
 end
 
 local function apply_window_options(win)
 	vim.wo[win].number = false
 	vim.wo[win].relativenumber = false
 	vim.wo[win].cursorline = true
+	vim.wo[win].cursorlineopt = "line"
 	vim.wo[win].signcolumn = "no"
 	vim.wo[win].foldcolumn = "0"
+	vim.wo[win].wrap = false
+	vim.wo[win].scrolloff = 3
+	vim.wo[win].winhighlight = "Normal:NormalFloat,FloatBorder:FloatBorder,FloatTitle:FloatTitle,CursorLine:Visual"
 end
 
 local function map(buf, lhs, rhs)
@@ -188,7 +245,7 @@ function M.open(themes)
 	end
 
 	local buf = create_buffer(themes)
-	local win = open_window(buf, #themes)
+	local win = open_window(buf, themes)
 
 	state.win = win
 	state.buf = buf
