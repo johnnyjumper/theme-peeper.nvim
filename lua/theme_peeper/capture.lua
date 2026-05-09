@@ -3,37 +3,6 @@ local M = {}
 local start_marker = "__THEME_PEEPER_START__"
 local end_marker = "__THEME_PEEPER_END__"
 
-local function is_json_safe(value)
-	local value_type = type(value)
-
-	return value_type == "string" or value_type == "number" or value_type == "boolean" or value == nil
-end
-
-local function normalize_global_name(name)
-	name = name:gsub("^g:", "")
-	name = name:gsub("^g%.", "")
-	return name
-end
-
-local function get_safe_globals()
-	local globals = {}
-	local names = vim.fn.getcompletion("g:", "var")
-
-	for _, raw_name in ipairs(names) do
-		local key = normalize_global_name(raw_name)
-
-		local ok, value = pcall(function()
-			return vim.g[key]
-		end)
-
-		if ok and type(key) == "string" and is_json_safe(value) then
-			globals[key] = value
-		end
-	end
-
-	return globals
-end
-
 local function build_child_script(payload)
 	return string.format(
 		[[
@@ -42,7 +11,6 @@ local payload = vim.json.decode(%q)
 vim.o.termguicolors = payload.termguicolors
 vim.o.background = payload.background
 
--- Match parent runtimepath as closely as possible.
 vim.opt.runtimepath = payload.runtime_paths
 
 for key, value in pairs(payload.globals or {}) do
@@ -52,7 +20,6 @@ end
 pcall(vim.cmd, "highlight clear")
 vim.g.colors_name = nil
 
--- Seed child with the parent's current effective highlight state.
 for name, hl in pairs(payload.parent_highlights or {}) do
 	if type(hl) == "table" and not vim.tbl_isempty(hl) then
 		pcall(vim.api.nvim_set_hl, 0, name, hl)
@@ -109,18 +76,8 @@ end
 function M.theme(theme, opts)
 	opts = opts or {}
 
-	local highlights = require("theme_peeper.highlights")
-
-	local globals = vim.tbl_deep_extend("force", get_safe_globals(), opts.globals or {})
-
-	local payload = {
-		theme = theme,
-		runtime_paths = vim.api.nvim_list_runtime_paths(),
-		parent_highlights = highlights.get_all_effective(),
-		globals = globals,
-		termguicolors = vim.o.termguicolors,
-		background = vim.o.background,
-	}
+	local state = require("theme_peeper.state")
+	local payload = state.payload(theme, opts)
 
 	local script_path = vim.fn.tempname() .. ".lua"
 	local script = build_child_script(payload)

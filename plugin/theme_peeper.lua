@@ -15,3 +15,11 @@ end, {
 		return vim.fn.getcompletion("", "color")
 	end,
 })
+
+vim.api.nvim_create_user_command("ThemePeeperCacheClear", function()
+	require("theme_peeper").clear_cache()
+end, {})
+
+vim.api.nvim_create_user_command("ThemePeeperCacheInfo", function()
+	require("theme_peeper").cache_info()
+end, {})

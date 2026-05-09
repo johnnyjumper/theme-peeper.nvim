@@ -171,4 +171,8 @@ function M.open(captured, _opts)
 	vim.keymap.set("n", "<Esc>", close, { buffer = buf })
 end
 
+function M.close()
+	close_existing_preview()
+end
+
 return M
