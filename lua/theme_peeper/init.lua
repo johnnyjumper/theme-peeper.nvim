@@ -12,6 +12,12 @@ function M.setup(opts)
 	config = vim.tbl_deep_extend("force", config, opts or {})
 end
 
+function M.list()
+	local themes = vim.fn.getcompletion("", "color")
+	table.sort(themes)
+	return themes
+end
+
 local function capture_theme(theme, use_cache)
 	local capture = require("theme_peeper.capture")
 
@@ -37,39 +43,81 @@ local function capture_theme(theme, use_cache)
 	return captured, nil
 end
 
-function M.peek(theme)
-	local preview = require("theme_peeper.preview")
+function M.capture(theme, opts)
+	opts = opts or {}
 
-	-- Important:
-	-- If a preview window is currently active, its highlight namespace can affect
-	-- the captured effective highlight state and poison the cache key.
-	preview.close()
+	local use_cache = opts.cache ~= false
+	return capture_theme(theme, use_cache)
+end
 
-	local captured, err = capture_theme(theme, true)
+function M.open(captured)
+	require("theme_peeper.preview").open(captured, config.preview)
+end
+
+function M.close()
+	require("theme_peeper.preview").close()
+end
+
+function M.preview(theme, opts)
+	opts = opts or {}
+
+	M.close()
+
+	local captured, err = M.capture(theme, {
+		cache = opts.cache,
+	})
 
 	if not captured then
+		return nil, err
+	end
+
+	M.open(captured)
+
+	return captured, nil
+end
+
+function M.peek(theme)
+	local _, err = M.preview(theme, {
+		cache = true,
+	})
+
+	if err then
 		vim.notify(err, vim.log.levels.ERROR)
+	end
+end
+
+function M.select()
+	local themes = M.list()
+
+	if #themes == 0 then
+		vim.notify("No colorschemes found", vim.log.levels.WARN)
 		return
 	end
 
-	preview.open(captured, config.preview)
+	vim.ui.select(themes, {
+		prompt = "Select colorscheme",
+	}, function(theme)
+		if not theme then
+			return
+		end
+
+		M.peek(theme)
+	end)
 end
 
 function M.debug(theme)
-	local preview = require("theme_peeper.preview")
-	local debug = require("theme_peeper.debug")
+	M.close()
 
-	preview.close()
-
-	-- Debug should always be fresh.
-	local captured, err = capture_theme(theme, false)
+	local captured, err = M.capture(theme, {
+		cache = false,
+	})
 
 	if not captured then
 		vim.notify(err, vim.log.levels.ERROR)
 		return
 	end
 
-	debug.open(captured)
+	require("theme_peeper.debug").open(captured)
 end
 
 function M.clear_cache()
