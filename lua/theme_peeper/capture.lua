@@ -9,11 +9,24 @@ local function is_json_safe(value)
 	return value_type == "string" or value_type == "number" or value_type == "boolean" or value == nil
 end
 
+local function normalize_global_name(name)
+	name = name:gsub("^g:", "")
+	name = name:gsub("^g%.", "")
+	return name
+end
+
 local function get_safe_globals()
 	local globals = {}
+	local names = vim.fn.getcompletion("g:", "var")
 
-	for key, value in pairs(vim.g) do
-		if type(key) == "string" and is_json_safe(value) then
+	for _, raw_name in ipairs(names) do
+		local key = normalize_global_name(raw_name)
+
+		local ok, value = pcall(function()
+			return vim.g[key]
+		end)
+
+		if ok and type(key) == "string" and is_json_safe(value) then
 			globals[key] = value
 		end
 	end
@@ -29,45 +42,57 @@ local payload = vim.json.decode(%q)
 vim.o.termguicolors = payload.termguicolors
 vim.o.background = payload.background
 
-for _, path in ipairs(payload.runtime_paths) do
-	pcall(function()
-		vim.opt.runtimepath:append(path)
-	end)
-end
+-- Match parent runtimepath as closely as possible.
+vim.opt.runtimepath = payload.runtime_paths
 
 for key, value in pairs(payload.globals or {}) do
 	vim.g[key] = value
 end
 
--- Start from the exact current parent highlight state.
+pcall(vim.cmd, "highlight clear")
+vim.g.colors_name = nil
+
+-- Seed child with the parent's current effective highlight state.
 for name, hl in pairs(payload.parent_highlights or {}) do
 	if type(hl) == "table" and not vim.tbl_isempty(hl) then
 		pcall(vim.api.nvim_set_hl, 0, name, hl)
 	end
 end
 
--- Now simulate the real operation we want to preview.
 vim.cmd.colorscheme(payload.theme)
 
-local highlights = vim.api.nvim_get_hl(0, { link = false })
-
-local function get(name)
-	return vim.api.nvim_get_hl(0, { name = name, link = false })
-end
+local highlights = require("theme_peeper.highlights")
+local all_highlights = highlights.get_all_effective()
 
 io.stdout:write("\n%s\n")
 io.stdout:write(vim.json.encode({
-	theme = payload.theme,
+	requested_theme = payload.theme,
 	colors_name = vim.g.colors_name,
 	background = vim.o.background,
-	normal = get("Normal"),
-	normal_float = get("NormalFloat"),
-	float_border = get("FloatBorder"),
-	comment = get("Comment"),
-	string = get("String"),
-	func = get("Function"),
-	keyword = get("Keyword"),
-	highlights = highlights,
+
+	sonokai = {
+		style = vim.g.sonokai_style,
+		enable_italic = vim.g.sonokai_enable_italic,
+		transparent_background = vim.g.sonokai_transparent_background,
+		diagnostic_text_highlight = vim.g.sonokai_diagnostic_text_highlight,
+		diagnostic_line_highlight = vim.g.sonokai_diagnostic_line_highlight,
+		diagnostic_virtual_text = vim.g.sonokai_diagnostic_virtual_text,
+	},
+
+	normal = highlights.get_effective("Normal"),
+	normal_float = highlights.get_effective("NormalFloat"),
+	float_border = highlights.get_effective("FloatBorder"),
+	float_title = highlights.get_effective("FloatTitle"),
+
+	comment = highlights.get_effective("Comment"),
+	string = highlights.get_effective("String"),
+	func = highlights.get_effective("Function"),
+	keyword = highlights.get_effective("Keyword"),
+	visual = highlights.get_effective("Visual"),
+	search = highlights.get_effective("Search"),
+	cursor_line = highlights.get_effective("CursorLine"),
+
+	highlights = all_highlights,
 }))
 io.stdout:write("\n%s\n")
 ]],
@@ -81,12 +106,18 @@ local function extract_json(stdout)
 	return stdout:match(start_marker .. "\n(.-)\n" .. end_marker)
 end
 
-function M.theme(theme, _opts)
+function M.theme(theme, opts)
+	opts = opts or {}
+
+	local highlights = require("theme_peeper.highlights")
+
+	local globals = vim.tbl_deep_extend("force", get_safe_globals(), opts.globals or {})
+
 	local payload = {
 		theme = theme,
 		runtime_paths = vim.api.nvim_list_runtime_paths(),
-		parent_highlights = vim.api.nvim_get_hl(0, { link = false }),
-		globals = get_safe_globals(),
+		parent_highlights = highlights.get_all_effective(),
+		globals = globals,
 		termguicolors = vim.o.termguicolors,
 		background = vim.o.background,
 	}

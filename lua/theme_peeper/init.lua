@@ -2,6 +2,7 @@ local M = {}
 
 local config = {
 	capture = {},
+	preview = {},
 }
 
 function M.setup(opts)
@@ -9,9 +10,6 @@ function M.setup(opts)
 end
 
 function M.peek(theme)
-	package.loaded["theme_peeper.capture"] = nil
-	package.loaded["theme_peeper.preview"] = nil
-
 	local capture = require("theme_peeper.capture")
 	local preview = require("theme_peeper.preview")
 
@@ -22,7 +20,21 @@ function M.peek(theme)
 		return
 	end
 
-	preview.open(captured)
+	preview.open(captured, config.preview)
+end
+
+function M.debug(theme)
+	local capture = require("theme_peeper.capture")
+	local debug = require("theme_peeper.debug")
+
+	local captured, err = capture.theme(theme, config.capture)
+
+	if not captured then
+		vim.notify(err, vim.log.levels.ERROR)
+		return
+	end
+
+	debug.open(captured)
 end
 
 return M
