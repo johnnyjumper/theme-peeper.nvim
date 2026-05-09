@@ -9,6 +9,7 @@ end
 local function normalize_global_name(name)
 	name = name:gsub("^g:", "")
 	name = name:gsub("^g%.", "")
+
 	return name
 end
 
@@ -31,27 +32,39 @@ function M.get_safe_globals()
 	return globals
 end
 
-function M.snapshot(opts)
+local function capture_globals(opts)
 	opts = opts or {}
 
-	local highlights = require("theme_peeper.highlights")
+	return vim.tbl_deep_extend("force", M.get_safe_globals(), opts.globals or {})
+end
 
-	local globals = vim.tbl_deep_extend("force", M.get_safe_globals(), opts.globals or {})
+local function base_payload(opts)
+	opts = opts or {}
 
 	return {
 		runtime_paths = vim.api.nvim_list_runtime_paths(),
-		parent_highlights = highlights.get_all_effective(),
-		globals = globals,
+		globals = capture_globals(opts),
 		termguicolors = vim.o.termguicolors,
 		background = vim.o.background,
 		current_colors_name = vim.g.colors_name,
 	}
 end
 
-function M.payload(theme, opts)
-	local snapshot = M.snapshot(opts)
-	snapshot.theme = theme
-	return snapshot
+function M.capture_payload(theme, opts)
+	local payload = base_payload(opts)
+
+	payload.theme = theme
+	payload.parent_highlights = require("theme_peeper.highlights").get_all_effective()
+
+	return payload
+end
+
+function M.cache_identity(theme, opts)
+	local identity = base_payload(opts)
+
+	identity.theme = theme
+
+	return identity
 end
 
 return M

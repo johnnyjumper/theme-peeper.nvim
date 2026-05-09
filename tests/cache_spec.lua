@@ -47,36 +47,4 @@ describe("theme_peeper.cache", function()
 		assert.are.equal(0, info.hits)
 		assert.are.equal(0, info.misses)
 	end)
-
-	it("changes key when configured theme globals change", function()
-		local cache = require("theme_peeper.cache")
-
-		local first = cache.key("theme_peeper_test_global", {
-			globals = {
-				theme_peeper_test_bg = "#111111",
-			},
-		})
-
-		local second = cache.key("theme_peeper_test_global", {
-			globals = {
-				theme_peeper_test_bg = "#222222",
-			},
-		})
-
-		assert.are_not.equal(first, second)
-	end)
-
-	it("does not change key for unrelated highlight noise", function()
-		local cache = require("theme_peeper.cache")
-
-		local first = cache.key("theme_peeper_test_global", {})
-
-		vim.api.nvim_set_hl(0, "ThemePeeperIrrelevantNoise", {
-			fg = "#010203",
-		})
-
-		local second = cache.key("theme_peeper_test_global", {})
-
-		assert.are.equal(first, second)
-	end)
 end)

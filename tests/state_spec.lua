@@ -28,9 +28,9 @@ describe("theme_peeper.state", function()
 		assert.is_nil(globals.theme_peeper_test_table)
 	end)
 
-	it("creates a payload with the requested theme", function()
+	it("creates a capture payload with parent highlights", function()
 		local state = require("theme_peeper.state")
-		local payload = state.payload("theme_peeper_test_global", {})
+		local payload = state.capture_payload("theme_peeper_test_global", {})
 
 		assert.are.equal("theme_peeper_test_global", payload.theme)
 		assert.is_table(payload.runtime_paths)
@@ -40,15 +40,37 @@ describe("theme_peeper.state", function()
 		assert.is_string(payload.background)
 	end)
 
-	it("merges explicit globals into the snapshot", function()
+	it("creates a cache identity without parent highlights", function()
+		local state = require("theme_peeper.state")
+		local identity = state.cache_identity("theme_peeper_test_global", {})
+
+		assert.are.equal("theme_peeper_test_global", identity.theme)
+		assert.is_table(identity.runtime_paths)
+		assert.is_table(identity.globals)
+		assert.is_nil(identity.parent_highlights)
+	end)
+
+	it("merges explicit globals into capture payload", function()
 		local state = require("theme_peeper.state")
 
-		local payload = state.payload("theme_peeper_test_global", {
+		local payload = state.capture_payload("theme_peeper_test_global", {
 			globals = {
 				theme_peeper_test_bg = "#123456",
 			},
 		})
 
 		assert.are.equal("#123456", payload.globals.theme_peeper_test_bg)
+	end)
+
+	it("merges explicit globals into cache identity", function()
+		local state = require("theme_peeper.state")
+
+		local identity = state.cache_identity("theme_peeper_test_global", {
+			globals = {
+				theme_peeper_test_bg = "#123456",
+			},
+		})
+
+		assert.are.equal("#123456", identity.globals.theme_peeper_test_bg)
 	end)
 end)

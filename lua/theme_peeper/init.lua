@@ -71,9 +71,13 @@ function M.preview(theme, opts)
 		return nil, err
 	end
 
-	M.open(captured)
+	require("theme_peeper.preview").open(captured, vim.tbl_deep_extend("force", config.preview, opts))
 
 	return captured, nil
+end
+
+function M.browse()
+	require("theme_peeper.browser").open(M.list())
 end
 
 function M.peek(theme)

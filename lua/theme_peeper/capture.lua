@@ -77,7 +77,7 @@ function M.theme(theme, opts)
 	opts = opts or {}
 
 	local state = require("theme_peeper.state")
-	local payload = state.payload(theme, opts)
+	local payload = state.capture_payload(theme, opts)
 
 	local script_path = vim.fn.tempname() .. ".lua"
 	local script = build_child_script(payload)

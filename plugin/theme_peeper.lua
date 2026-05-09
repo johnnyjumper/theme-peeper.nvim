@@ -27,3 +27,7 @@ end, {})
 vim.api.nvim_create_user_command("ThemePeeperCacheInfo", function()
 	require("theme_peeper").cache_info()
 end, {})
+
+vim.api.nvim_create_user_command("ThemePeepBrowse", function()
+	require("theme_peeper").browse()
+end, {})

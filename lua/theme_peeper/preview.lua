@@ -132,7 +132,8 @@ function M.open(captured, _opts)
 	local width = 80
 	local height = math.min(#sample_lines, 24)
 
-	local win = vim.api.nvim_open_win(buf, true, {
+	local enter = _opts == nil or _opts.enter ~= false
+	local win = vim.api.nvim_open_win(buf, enter, {
 		relative = "editor",
 		width = width,
 		height = height,
