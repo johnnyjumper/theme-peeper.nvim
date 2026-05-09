@@ -1,33 +1,40 @@
+local function theme_peeper()
+	return require("theme_peeper")
+end
+
 local function complete_colorschemes()
 	return vim.fn.getcompletion("", "color")
 end
 
-vim.api.nvim_create_user_command("ThemePeep", function(opts)
-	require("theme_peeper").peek(opts.args)
-end, {
+local function create_command(name, callback, opts)
+	vim.api.nvim_create_user_command(name, callback, opts or {})
+end
+
+local colorscheme_arg = {
 	nargs = 1,
 	complete = complete_colorschemes,
-})
+}
 
-vim.api.nvim_create_user_command("ThemePeepSelect", function()
-	require("theme_peeper").select()
-end, {})
+create_command("ThemePeep", function(opts)
+	theme_peeper().peek(opts.args)
+end, colorscheme_arg)
 
-vim.api.nvim_create_user_command("ThemePeeperDebug", function(opts)
-	require("theme_peeper").debug(opts.args)
-end, {
-	nargs = 1,
-	complete = complete_colorschemes,
-})
+create_command("ThemePeepSelect", function()
+	theme_peeper().select()
+end)
 
-vim.api.nvim_create_user_command("ThemePeeperCacheClear", function()
-	require("theme_peeper").clear_cache()
-end, {})
+create_command("ThemePeeperDebug", function(opts)
+	theme_peeper().debug(opts.args)
+end, colorscheme_arg)
 
-vim.api.nvim_create_user_command("ThemePeeperCacheInfo", function()
-	require("theme_peeper").cache_info()
-end, {})
+create_command("ThemePeeperCacheClear", function()
+	theme_peeper().clear_cache()
+end)
 
-vim.api.nvim_create_user_command("ThemePeepBrowse", function()
-	require("theme_peeper").browse()
-end, {})
+create_command("ThemePeeperCacheInfo", function()
+	theme_peeper().cache_info()
+end)
+
+create_command("ThemePeepBrowse", function()
+	theme_peeper().browse()
+end)

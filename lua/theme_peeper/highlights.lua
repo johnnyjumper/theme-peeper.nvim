@@ -1,5 +1,15 @@
 local M = {}
 
+local color_attrs = { "fg", "bg", "sp" }
+local boolean_attrs = {
+	"bold",
+	"italic",
+	"underline",
+	"undercurl",
+	"strikethrough",
+	"reverse",
+}
+
 local function attr_to_bool(id, attr)
 	return vim.fn.synIDattr(id, attr) == "1"
 end
@@ -14,54 +24,45 @@ local function attr_to_color(id, attr)
 	return value
 end
 
-function M.get_effective(name)
+local function apply_color_attr(hl, id, attr)
+	local value = attr_to_color(id, attr)
+
+	if value then
+		hl[attr] = value
+	end
+end
+
+local function apply_boolean_attr(hl, id, attr)
+	if attr_to_bool(id, attr) then
+		hl[attr] = true
+	end
+end
+
+local function effective_id(name)
 	local raw_id = vim.fn.hlID(name)
 
 	if raw_id == 0 then
+		return nil
+	end
+
+	return vim.fn.synIDtrans(raw_id)
+end
+
+function M.get_effective(name)
+	local id = effective_id(name)
+
+	if not id then
 		return {}
 	end
 
-	local id = vim.fn.synIDtrans(raw_id)
 	local hl = {}
 
-	local fg = attr_to_color(id, "fg")
-	local bg = attr_to_color(id, "bg")
-	local sp = attr_to_color(id, "sp")
-
-	if fg then
-		hl.fg = fg
+	for _, attr in ipairs(color_attrs) do
+		apply_color_attr(hl, id, attr)
 	end
 
-	if bg then
-		hl.bg = bg
-	end
-
-	if sp then
-		hl.sp = sp
-	end
-
-	if attr_to_bool(id, "bold") then
-		hl.bold = true
-	end
-
-	if attr_to_bool(id, "italic") then
-		hl.italic = true
-	end
-
-	if attr_to_bool(id, "underline") then
-		hl.underline = true
-	end
-
-	if attr_to_bool(id, "undercurl") then
-		hl.undercurl = true
-	end
-
-	if attr_to_bool(id, "strikethrough") then
-		hl.strikethrough = true
-	end
-
-	if attr_to_bool(id, "reverse") then
-		hl.reverse = true
+	for _, attr in ipairs(boolean_attrs) do
+		apply_boolean_attr(hl, id, attr)
 	end
 
 	return hl

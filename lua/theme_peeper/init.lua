@@ -18,13 +18,19 @@ function M.list()
 	return themes
 end
 
-local function capture_theme(theme, use_cache)
-	local capture = require("theme_peeper.capture")
+local function notify_error(err)
+	vim.notify(err, vim.log.levels.ERROR)
+end
 
-	if not use_cache or not config.cache.enabled then
-		return capture.theme(theme, config.capture)
-	end
+local function notify_no_themes()
+	vim.notify("No colorschemes found", vim.log.levels.WARN)
+end
 
+local function capture_without_cache(theme)
+	return require("theme_peeper.capture").theme(theme, config.capture)
+end
+
+local function capture_with_cache(theme)
 	local cache = require("theme_peeper.cache")
 	local cached, key = cache.get(theme, config.capture)
 
@@ -32,7 +38,7 @@ local function capture_theme(theme, use_cache)
 		return cached, nil
 	end
 
-	local captured, err = capture.theme(theme, config.capture)
+	local captured, err = capture_without_cache(theme)
 
 	if not captured then
 		return nil, err
@@ -43,11 +49,22 @@ local function capture_theme(theme, use_cache)
 	return captured, nil
 end
 
+local function should_use_cache(opts)
+	return opts.cache ~= false and config.cache.enabled
+end
+
+local function merged_preview_opts(opts)
+	return vim.tbl_deep_extend("force", config.preview, opts or {})
+end
+
 function M.capture(theme, opts)
 	opts = opts or {}
 
-	local use_cache = opts.cache ~= false
-	return capture_theme(theme, use_cache)
+	if should_use_cache(opts) then
+		return capture_with_cache(theme)
+	end
+
+	return capture_without_cache(theme)
 end
 
 function M.open(captured)
@@ -71,7 +88,7 @@ function M.preview(theme, opts)
 		return nil, err
 	end
 
-	require("theme_peeper.preview").open(captured, vim.tbl_deep_extend("force", config.preview, opts))
+	require("theme_peeper.preview").open(captured, merged_preview_opts(opts))
 
 	return captured, nil
 end
@@ -86,7 +103,7 @@ function M.peek(theme)
 	})
 
 	if err then
-		vim.notify(err, vim.log.levels.ERROR)
+		notify_error(err)
 	end
 end
 
@@ -94,7 +111,7 @@ function M.select()
 	local themes = M.list()
 
 	if #themes == 0 then
-		vim.notify("No colorschemes found", vim.log.levels.WARN)
+		notify_no_themes()
 		return
 	end
 
@@ -117,7 +134,7 @@ function M.debug(theme)
 	})
 
 	if not captured then
-		vim.notify(err, vim.log.levels.ERROR)
+		notify_error(err)
 		return
 	end
 

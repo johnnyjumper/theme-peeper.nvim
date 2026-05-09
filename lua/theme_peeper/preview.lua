@@ -1,5 +1,9 @@
 local M = {}
 
+local preview_width = 80
+local preview_max_height = 24
+local preview_zindex = 80
+
 local state = {
 	win = nil,
 	buf = nil,
@@ -29,6 +33,19 @@ local sample_lines = {
 	"Visual  Search   CursorLine  Pmenu  FloatBorder",
 }
 
+local sample_groups = {
+	{ line = 19, word = "Normal", group = "Normal" },
+	{ line = 19, word = "Comment", group = "Comment" },
+	{ line = 19, word = "String", group = "String" },
+	{ line = 19, word = "Function", group = "Function" },
+	{ line = 19, word = "Keyword", group = "Keyword" },
+	{ line = 20, word = "Visual", group = "Visual" },
+	{ line = 20, word = "Search", group = "Search" },
+	{ line = 20, word = "CursorLine", group = "CursorLine" },
+	{ line = 20, word = "Pmenu", group = "Pmenu" },
+	{ line = 20, word = "FloatBorder", group = "FloatBorder" },
+}
+
 local function is_empty(value)
 	return value == nil or vim.tbl_isempty(value)
 end
@@ -42,11 +59,13 @@ local function close_existing_preview()
 	state.buf = nil
 end
 
+local function theme_name(captured)
+	return captured.colors_name or captured.requested_theme or "unknown"
+end
+
 local function normalize_highlights(captured)
 	local highlights = vim.deepcopy(captured.highlights or {})
 
-	-- The preview is technically a floating window.
-	-- But visually we want to preview a normal editor buffer.
 	if not is_empty(captured.normal) then
 		highlights.Normal = vim.deepcopy(captured.normal)
 		highlights.NormalFloat = vim.deepcopy(captured.normal)
@@ -54,7 +73,6 @@ local function normalize_highlights(captured)
 		highlights.SignColumn = vim.deepcopy(captured.normal)
 	end
 
-	-- Keep theme-native float border/title if captured.
 	if not is_empty(captured.float_border) then
 		highlights.FloatBorder = vim.deepcopy(captured.float_border)
 	end
@@ -76,8 +94,55 @@ local function apply_highlights(namespace, captured)
 	end
 end
 
-local function create_preview_namespace(theme)
+local function create_namespace(theme)
 	return vim.api.nvim_create_namespace("theme-peeper.preview." .. theme .. "." .. tostring(vim.uv.hrtime()))
+end
+
+local function create_buffer()
+	local buf = vim.api.nvim_create_buf(false, true)
+
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, sample_lines)
+
+	vim.bo[buf].filetype = "lua"
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "wipe"
+	vim.bo[buf].swapfile = false
+	vim.bo[buf].modifiable = false
+
+	return buf
+end
+
+local function window_config(theme)
+	local ui = vim.api.nvim_list_uis()[1]
+	local height = math.min(#sample_lines, preview_max_height)
+
+	return {
+		relative = "editor",
+		width = preview_width,
+		height = height,
+		col = math.floor((ui.width - preview_width) / 2),
+		row = math.floor((ui.height - height) / 2),
+		style = "minimal",
+		border = "rounded",
+		title = " " .. theme .. " ",
+		title_pos = "center",
+		zindex = preview_zindex,
+	}
+end
+
+local function open_window(buf, theme, opts)
+	local enter = opts == nil or opts.enter ~= false
+
+	return vim.api.nvim_open_win(buf, enter, window_config(theme))
+end
+
+local function apply_window_options(win)
+	vim.wo[win].number = false
+	vim.wo[win].relativenumber = false
+	vim.wo[win].signcolumn = "no"
+	vim.wo[win].cursorline = false
+	vim.wo[win].foldcolumn = "0"
+	vim.wo[win].winhighlight = ""
 end
 
 local function highlight_word(buf, namespace, line, word, group)
@@ -100,76 +165,37 @@ local function highlight_word(buf, namespace, line, word, group)
 end
 
 local function decorate_sample_groups(buf, namespace)
-	-- 0-based line numbers.
-	highlight_word(buf, namespace, 19, "Normal", "Normal")
-	highlight_word(buf, namespace, 19, "Comment", "Comment")
-	highlight_word(buf, namespace, 19, "String", "String")
-	highlight_word(buf, namespace, 19, "Function", "Function")
-	highlight_word(buf, namespace, 19, "Keyword", "Keyword")
-
-	highlight_word(buf, namespace, 20, "Visual", "Visual")
-	highlight_word(buf, namespace, 20, "Search", "Search")
-	highlight_word(buf, namespace, 20, "CursorLine", "CursorLine")
-	highlight_word(buf, namespace, 20, "Pmenu", "Pmenu")
-	highlight_word(buf, namespace, 20, "FloatBorder", "FloatBorder")
+	for _, item in ipairs(sample_groups) do
+		highlight_word(buf, namespace, item.line, item.word, item.group)
+	end
 end
 
-function M.open(captured, _opts)
+local function apply_preview_namespace(win, buf, captured, theme)
+	local namespace = create_namespace(theme)
+
+	apply_highlights(namespace, captured)
+	vim.api.nvim_win_set_hl_ns(win, namespace)
+	decorate_sample_groups(buf, namespace)
+end
+
+local function set_keymaps(buf)
+	vim.keymap.set("n", "q", close_existing_preview, { buffer = buf })
+	vim.keymap.set("n", "<Esc>", close_existing_preview, { buffer = buf })
+end
+
+function M.open(captured, opts)
 	close_existing_preview()
 
-	local theme = captured.colors_name or captured.requested_theme or "unknown"
-	local buf = vim.api.nvim_create_buf(false, true)
-
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, sample_lines)
-
-	vim.bo[buf].filetype = "lua"
-	vim.bo[buf].buftype = "nofile"
-	vim.bo[buf].bufhidden = "wipe"
-	vim.bo[buf].swapfile = false
-	vim.bo[buf].modifiable = false
-
-	local ui = vim.api.nvim_list_uis()[1]
-	local width = 80
-	local height = math.min(#sample_lines, 24)
-
-	local enter = _opts == nil or _opts.enter ~= false
-	local win = vim.api.nvim_open_win(buf, enter, {
-		relative = "editor",
-		width = width,
-		height = height,
-		col = math.floor((ui.width - width) / 2),
-		row = math.floor((ui.height - height) / 2),
-		style = "minimal",
-		border = "rounded",
-		title = " " .. theme .. " ",
-		title_pos = "center",
-		zindex = 80,
-	})
+	local theme = theme_name(captured)
+	local buf = create_buffer()
+	local win = open_window(buf, theme, opts)
 
 	state.win = win
 	state.buf = buf
 
-	vim.wo[win].number = false
-	vim.wo[win].relativenumber = false
-	vim.wo[win].signcolumn = "no"
-	vim.wo[win].cursorline = false
-	vim.wo[win].foldcolumn = "0"
-	vim.wo[win].winhighlight = ""
-
-	local namespace = create_preview_namespace(theme)
-
-	apply_highlights(namespace, captured)
-
-	vim.api.nvim_win_set_hl_ns(win, namespace)
-
-	decorate_sample_groups(buf, namespace)
-
-	local function close()
-		close_existing_preview()
-	end
-
-	vim.keymap.set("n", "q", close, { buffer = buf })
-	vim.keymap.set("n", "<Esc>", close, { buffer = buf })
+	apply_window_options(win)
+	apply_preview_namespace(win, buf, captured, theme)
+	set_keymaps(buf)
 end
 
 function M.close()

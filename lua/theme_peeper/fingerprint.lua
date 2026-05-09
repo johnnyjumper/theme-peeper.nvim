@@ -16,9 +16,7 @@ local function sorted_keys(value)
 	return keys
 end
 
-local function stable_encode(value)
-	local value_type = type(value)
-
+local function encode_scalar(value, value_type)
 	if value == nil then
 		return "nil"
 	end
@@ -29,6 +27,17 @@ local function stable_encode(value)
 
 	if value_type == "number" or value_type == "boolean" then
 		return tostring(value)
+	end
+
+	return nil
+end
+
+local function stable_encode(value)
+	local value_type = type(value)
+	local scalar = encode_scalar(value, value_type)
+
+	if scalar then
+		return scalar
 	end
 
 	if value_type ~= "table" then
@@ -69,7 +78,9 @@ function M.build(theme, opts)
 end
 
 function M.key(theme, opts)
-	return vim.fn.sha256(stable_encode(M.build(theme, opts)))
+	local identity = M.build(theme, opts)
+
+	return vim.fn.sha256(stable_encode(identity))
 end
 
 return M

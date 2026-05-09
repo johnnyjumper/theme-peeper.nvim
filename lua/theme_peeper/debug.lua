@@ -1,6 +1,9 @@
 local M = {}
 
-local groups = {
+local WINDOW_WIDTH = 110
+local WINDOW_HEIGHT = 32
+
+local captured_groups = {
 	"Normal",
 	"NormalFloat",
 	"FloatBorder",
@@ -30,25 +33,8 @@ local function append_inspected(lines, label, value)
 	end
 end
 
-function M.open(captured)
-	local lines = {
-		"Theme Peeper Debug",
-		"",
-		"requested_theme = " .. tostring(captured.requested_theme),
-		"colors_name     = " .. tostring(captured.colors_name),
-		"background      = " .. tostring(captured.background),
-		"",
-		"Sonokai globals:",
-		"",
-	}
-
-	append_inspected(lines, "sonokai", captured.sonokai)
-
-	table.insert(lines, "")
-	table.insert(lines, "Captured groups:")
-	table.insert(lines, "")
-
-	local lookup = {
+local function group_lookup(captured)
+	return {
 		Normal = captured.normal,
 		NormalFloat = captured.normal_float,
 		FloatBorder = captured.float_border,
@@ -61,11 +47,47 @@ function M.open(captured)
 		Search = captured.search,
 		CursorLine = captured.cursor_line,
 	}
+end
 
-	for _, group in ipairs(groups) do
+local function append_header(lines, captured)
+	table.insert(lines, "Theme Peeper Debug")
+	table.insert(lines, "")
+	table.insert(lines, "requested_theme = " .. tostring(captured.requested_theme))
+	table.insert(lines, "colors_name     = " .. tostring(captured.colors_name))
+	table.insert(lines, "background      = " .. tostring(captured.background))
+end
+
+local function append_sonokai(lines, captured)
+	table.insert(lines, "")
+	table.insert(lines, "Sonokai globals:")
+	table.insert(lines, "")
+
+	append_inspected(lines, "sonokai", captured.sonokai)
+end
+
+local function append_captured_groups(lines, captured)
+	local lookup = group_lookup(captured)
+
+	table.insert(lines, "")
+	table.insert(lines, "Captured groups:")
+	table.insert(lines, "")
+
+	for _, group in ipairs(captured_groups) do
 		append_inspected(lines, group, lookup[group])
 	end
+end
 
+local function debug_lines(captured)
+	local lines = {}
+
+	append_header(lines, captured)
+	append_sonokai(lines, captured)
+	append_captured_groups(lines, captured)
+
+	return lines
+end
+
+local function create_buffer(lines)
 	local buf = vim.api.nvim_create_buf(false, true)
 
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -76,30 +98,48 @@ function M.open(captured)
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].modifiable = false
 
-	local ui = vim.api.nvim_list_uis()[1]
-	local width = 110
-	local height = math.min(#lines, 32)
+	return buf
+end
 
-	local win = vim.api.nvim_open_win(buf, true, {
+local function window_config(lines)
+	local ui = vim.api.nvim_list_uis()[1]
+	local height = math.min(#lines, WINDOW_HEIGHT)
+
+	return {
 		relative = "editor",
-		width = width,
+		width = WINDOW_WIDTH,
 		height = height,
-		col = math.floor((ui.width - width) / 2),
+		col = math.floor((ui.width - WINDOW_WIDTH) / 2),
 		row = math.floor((ui.height - height) / 2),
 		style = "minimal",
 		border = "rounded",
 		title = " Theme Peeper Debug ",
 		title_pos = "center",
-	})
+	}
+end
 
-	local function close()
-		if vim.api.nvim_win_is_valid(win) then
-			vim.api.nvim_win_close(win, true)
-		end
+local function close_window(win)
+	if vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_win_close(win, true)
 	end
+end
 
-	vim.keymap.set("n", "q", close, { buffer = buf })
-	vim.keymap.set("n", "<Esc>", close, { buffer = buf })
+local function set_keymaps(buf, win)
+	vim.keymap.set("n", "q", function()
+		close_window(win)
+	end, { buffer = buf })
+
+	vim.keymap.set("n", "<Esc>", function()
+		close_window(win)
+	end, { buffer = buf })
+end
+
+function M.open(captured)
+	local lines = debug_lines(captured)
+	local buf = create_buffer(lines)
+	local win = vim.api.nvim_open_win(buf, true, window_config(lines))
+
+	set_keymaps(buf, win)
 end
 
 return M

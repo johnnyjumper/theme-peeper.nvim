@@ -1,5 +1,12 @@
 local M = {}
 
+local browser_width = 36
+local browser_min_height = 10
+local browser_height_ratio = 0.7
+local browser_left_margin = 4
+local browser_zindex = 90
+local preview_delay_ms = 120
+
 local state = {
 	win = nil,
 	buf = nil,
@@ -7,11 +14,13 @@ local state = {
 }
 
 local function close_timer()
-	if state.timer then
-		state.timer:stop()
-		state.timer:close()
-		state.timer = nil
+	if not state.timer then
+		return
 	end
+
+	state.timer:stop()
+	state.timer:close()
+	state.timer = nil
 end
 
 local function close_window()
@@ -23,13 +32,17 @@ local function close_window()
 	state.buf = nil
 end
 
-local function close_all()
+local function close_browser()
 	close_timer()
 	close_window()
+end
+
+local function close_browser_and_preview()
+	close_browser()
 	require("theme_peeper.preview").close()
 end
 
-local function selected_theme(buf)
+local function get_selected_theme(buf)
 	local row = vim.api.nvim_win_get_cursor(0)[1]
 	local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1]
 
@@ -40,6 +53,21 @@ local function selected_theme(buf)
 	return vim.trim(line)
 end
 
+local function browser_is_open()
+	return state.win and vim.api.nvim_win_is_valid(state.win)
+end
+
+local function preview_theme(theme)
+	if not browser_is_open() then
+		return
+	end
+
+	require("theme_peeper").preview(theme, {
+		cache = true,
+		enter = false,
+	})
+end
+
 local function schedule_preview(theme)
 	close_timer()
 
@@ -48,44 +76,35 @@ local function schedule_preview(theme)
 	end
 
 	state.timer = vim.uv.new_timer()
-
-	state.timer:start(120, 0, function()
+	state.timer:start(preview_delay_ms, 0, function()
 		vim.schedule(function()
-			if not state.win or not vim.api.nvim_win_is_valid(state.win) then
-				return
-			end
-
-			require("theme_peeper").preview(theme, {
-				cache = true,
-				enter = false,
-			})
+			preview_theme(theme)
 		end)
 	end)
 end
 
-local function move(buf, delta)
-	local line_count = vim.api.nvim_buf_line_count(buf)
-	local cursor = vim.api.nvim_win_get_cursor(0)
-	local next_row = cursor[1] + delta
-
-	if next_row < 1 then
-		next_row = line_count
-	elseif next_row > line_count then
-		next_row = 1
+local function wrapped_row(row, line_count)
+	if row < 1 then
+		return line_count
 	end
 
-	vim.api.nvim_win_set_cursor(0, { next_row, 0 })
-	schedule_preview(selected_theme(buf))
+	if row > line_count then
+		return 1
+	end
+
+	return row
 end
 
-function M.open(themes)
-	close_all()
+local function move_cursor(buf, delta)
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local line_count = vim.api.nvim_buf_line_count(buf)
+	local next_row = wrapped_row(cursor[1] + delta, line_count)
 
-	if #themes == 0 then
-		vim.notify("No colorschemes found", vim.log.levels.WARN)
-		return
-	end
+	vim.api.nvim_win_set_cursor(0, { next_row, 0 })
+	schedule_preview(get_selected_theme(buf))
+end
 
+local function create_buffer(themes)
 	local buf = vim.api.nvim_create_buf(false, true)
 
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, themes)
@@ -95,57 +114,88 @@ function M.open(themes)
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].modifiable = false
 
-	local ui = vim.api.nvim_list_uis()[1]
-	local width = 36
-	local height = math.min(#themes, math.max(10, math.floor(ui.height * 0.7)))
+	return buf
+end
 
-	local win = vim.api.nvim_open_win(buf, true, {
+local function window_height(theme_count, ui_height)
+	local max_height = math.floor(ui_height * browser_height_ratio)
+
+	return math.min(theme_count, math.max(browser_min_height, max_height))
+end
+
+local function window_config(theme_count)
+	local ui = vim.api.nvim_list_uis()[1]
+	local height = window_height(theme_count, ui.height)
+
+	return {
 		relative = "editor",
-		width = width,
+		width = browser_width,
 		height = height,
-		col = 4,
+		col = browser_left_margin,
 		row = math.floor((ui.height - height) / 2),
 		style = "minimal",
 		border = "rounded",
 		title = " Themes ",
 		title_pos = "center",
-		zindex = 90,
-	})
+		zindex = browser_zindex,
+	}
+end
 
-	state.win = win
-	state.buf = buf
+local function open_window(buf, theme_count)
+	return vim.api.nvim_open_win(buf, true, window_config(theme_count))
+end
 
+local function apply_window_options(win)
 	vim.wo[win].number = false
 	vim.wo[win].relativenumber = false
 	vim.wo[win].cursorline = true
 	vim.wo[win].signcolumn = "no"
 	vim.wo[win].foldcolumn = "0"
+end
 
-	vim.keymap.set("n", "j", function()
-		move(buf, 1)
-	end, { buffer = buf })
+local function map(buf, lhs, rhs)
+	vim.keymap.set("n", lhs, rhs, { buffer = buf })
+end
 
-	vim.keymap.set("n", "k", function()
-		move(buf, -1)
-	end, { buffer = buf })
+local function set_keymaps(buf)
+	map(buf, "j", function()
+		move_cursor(buf, 1)
+	end)
 
-	vim.keymap.set("n", "<Down>", function()
-		move(buf, 1)
-	end, { buffer = buf })
+	map(buf, "k", function()
+		move_cursor(buf, -1)
+	end)
 
-	vim.keymap.set("n", "<Up>", function()
-		move(buf, -1)
-	end, { buffer = buf })
+	map(buf, "<Down>", function()
+		move_cursor(buf, 1)
+	end)
 
-	vim.keymap.set("n", "<CR>", function()
-		close_timer()
-		close_window()
-	end, { buffer = buf })
+	map(buf, "<Up>", function()
+		move_cursor(buf, -1)
+	end)
 
-	vim.keymap.set("n", "q", close_all, { buffer = buf })
-	vim.keymap.set("n", "<Esc>", close_all, { buffer = buf })
+	map(buf, "<CR>", close_browser)
+	map(buf, "q", close_browser_and_preview)
+	map(buf, "<Esc>", close_browser_and_preview)
+end
 
-	schedule_preview(selected_theme(buf))
+function M.open(themes)
+	close_browser_and_preview()
+
+	if #themes == 0 then
+		vim.notify("No colorschemes found", vim.log.levels.WARN)
+		return
+	end
+
+	local buf = create_buffer(themes)
+	local win = open_window(buf, #themes)
+
+	state.win = win
+	state.buf = buf
+
+	apply_window_options(win)
+	set_keymaps(buf)
+	schedule_preview(get_selected_theme(buf))
 end
 
 return M
