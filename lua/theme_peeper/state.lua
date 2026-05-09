@@ -55,34 +55,15 @@ local function merged_globals(opts)
 	return vim.tbl_deep_extend("force", M.get_safe_globals(), user_globals(opts))
 end
 
-local function base_payload(opts)
+function M.capture_payload(theme, opts)
 	return {
+		theme = theme,
 		runtime_paths = vim.api.nvim_list_runtime_paths(),
 		globals = merged_globals(opts),
 		termguicolors = vim.o.termguicolors,
 		background = vim.o.background,
 		current_colors_name = vim.g.colors_name,
 	}
-end
-
-local function payload_for_theme(theme, opts)
-	local payload = base_payload(opts)
-
-	payload.theme = theme
-
-	return payload
-end
-
-function M.capture_payload(theme, opts)
-	local payload = payload_for_theme(theme, opts)
-
-	payload.parent_highlights = require("theme_peeper.highlights").get_all_effective()
-
-	return payload
-end
-
-function M.cache_identity(theme, opts)
-	return payload_for_theme(theme, opts)
 end
 
 return M

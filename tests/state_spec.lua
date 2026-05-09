@@ -28,29 +28,19 @@ describe("theme_peeper.state", function()
 		assert.is_nil(globals.theme_peeper_test_table)
 	end)
 
-	it("creates a capture payload with parent highlights", function()
+	it("creates a capture payload for the child Neovim process", function()
 		local state = require("theme_peeper.state")
 		local payload = state.capture_payload("theme_peeper_test_global", {})
 
 		assert.are.equal("theme_peeper_test_global", payload.theme)
 		assert.is_table(payload.runtime_paths)
-		assert.is_table(payload.parent_highlights)
 		assert.is_table(payload.globals)
 		assert.is_boolean(payload.termguicolors)
 		assert.is_string(payload.background)
+		assert.is_nil(payload.parent_highlights)
 	end)
 
-	it("creates a cache identity without parent highlights", function()
-		local state = require("theme_peeper.state")
-		local identity = state.cache_identity("theme_peeper_test_global", {})
-
-		assert.are.equal("theme_peeper_test_global", identity.theme)
-		assert.is_table(identity.runtime_paths)
-		assert.is_table(identity.globals)
-		assert.is_nil(identity.parent_highlights)
-	end)
-
-	it("merges explicit globals into capture payload", function()
+	it("merges explicit globals into the capture payload", function()
 		local state = require("theme_peeper.state")
 
 		local payload = state.capture_payload("theme_peeper_test_global", {
@@ -60,17 +50,5 @@ describe("theme_peeper.state", function()
 		})
 
 		assert.are.equal("#123456", payload.globals.theme_peeper_test_bg)
-	end)
-
-	it("merges explicit globals into cache identity", function()
-		local state = require("theme_peeper.state")
-
-		local identity = state.cache_identity("theme_peeper_test_global", {
-			globals = {
-				theme_peeper_test_bg = "#123456",
-			},
-		})
-
-		assert.are.equal("#123456", identity.globals.theme_peeper_test_bg)
 	end)
 end)

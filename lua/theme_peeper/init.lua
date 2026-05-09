@@ -15,11 +15,12 @@ end
 function M.list()
 	local themes = vim.fn.getcompletion("", "color")
 	table.sort(themes)
+
 	return themes
 end
 
-local function notify_error(err)
-	vim.notify(err, vim.log.levels.ERROR)
+local function notify_error(message)
+	vim.notify(message, vim.log.levels.ERROR)
 end
 
 local function notify_no_themes()
@@ -32,7 +33,7 @@ end
 
 local function capture_with_cache(theme)
 	local cache = require("theme_peeper.cache")
-	local cached, key = cache.get(theme, config.capture)
+	local cached = cache.get(theme, config.capture)
 
 	if cached then
 		return cached, nil
@@ -44,7 +45,7 @@ local function capture_with_cache(theme)
 		return nil, err
 	end
 
-	cache.set(key, captured)
+	cache.set(theme, config.capture, captured)
 
 	return captured, nil
 end
@@ -152,8 +153,6 @@ function M.cache_info()
 	vim.notify(table.concat({
 		"Theme Peeper cache",
 		"entries: " .. info.entries,
-		"hits: " .. info.hits,
-		"misses: " .. info.misses,
 	}, "\n"))
 end
 

@@ -19,12 +19,6 @@ end
 pcall(vim.cmd, "highlight clear")
 vim.g.colors_name = nil
 
-for name, hl in pairs(payload.parent_highlights or {}) do
-	if type(hl) == "table" and not vim.tbl_isempty(hl) then
-		pcall(vim.api.nvim_set_hl, 0, name, hl)
-	end
-end
-
 vim.cmd.colorscheme(payload.theme)
 
 local highlights = require("theme_peeper.highlights")

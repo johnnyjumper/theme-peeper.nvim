@@ -1,10 +1,54 @@
 local M = {}
 
 local store = {}
-local stats = {
-	hits = 0,
-	misses = 0,
-}
+
+local function sorted_keys(tbl)
+	local keys = {}
+
+	for key in pairs(tbl or {}) do
+		table.insert(keys, key)
+	end
+
+	table.sort(keys, function(left, right)
+		return tostring(left) < tostring(right)
+	end)
+
+	return keys
+end
+
+local function encode_value(value)
+	local value_type = type(value)
+
+	if value == nil then
+		return "nil"
+	end
+
+	if value_type == "string" then
+		return string.format("%q", value)
+	end
+
+	if value_type == "number" or value_type == "boolean" then
+		return tostring(value)
+	end
+
+	if value_type ~= "table" then
+		return value_type .. ":" .. tostring(value)
+	end
+
+	local parts = {}
+
+	for _, key in ipairs(sorted_keys(value)) do
+		table.insert(parts, encode_value(key) .. "=" .. encode_value(value[key]))
+	end
+
+	return "{" .. table.concat(parts, ",") .. "}"
+end
+
+local function cache_key(theme, opts)
+	local payload = require("theme_peeper.state").capture_payload(theme, opts)
+
+	return encode_value(payload)
+end
 
 local function count_entries()
 	local count = 0
@@ -17,33 +61,26 @@ local function count_entries()
 end
 
 function M.get(theme, opts)
-	local key = require("theme_peeper.fingerprint").key(theme, opts)
-	local cached = store[key]
+	local cached = store[cache_key(theme, opts)]
 
-	if cached then
-		stats.hits = stats.hits + 1
-		return vim.deepcopy(cached), key
+	if not cached then
+		return nil
 	end
 
-	stats.misses = stats.misses + 1
-	return nil, key
+	return vim.deepcopy(cached)
 end
 
-function M.set(key, captured)
-	store[key] = vim.deepcopy(captured)
+function M.set(theme, opts, captured)
+	store[cache_key(theme, opts)] = vim.deepcopy(captured)
 end
 
 function M.clear()
 	store = {}
-	stats.hits = 0
-	stats.misses = 0
 end
 
 function M.info()
 	return {
 		entries = count_entries(),
-		hits = stats.hits,
-		misses = stats.misses,
 	}
 end
 
