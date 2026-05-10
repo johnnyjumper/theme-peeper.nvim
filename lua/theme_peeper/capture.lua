@@ -30,15 +30,6 @@ io.stdout:write(vim.json.encode({
 	colors_name = vim.g.colors_name,
 	background = vim.o.background,
 
-	sonokai = {
-		style = vim.g.sonokai_style,
-		enable_italic = vim.g.sonokai_enable_italic,
-		transparent_background = vim.g.sonokai_transparent_background,
-		diagnostic_text_highlight = vim.g.sonokai_diagnostic_text_highlight,
-		diagnostic_line_highlight = vim.g.sonokai_diagnostic_line_highlight,
-		diagnostic_virtual_text = vim.g.sonokai_diagnostic_virtual_text,
-	},
-
 	normal = highlights.get_effective("Normal"),
 	normal_float = highlights.get_effective("NormalFloat"),
 	float_border = highlights.get_effective("FloatBorder"),

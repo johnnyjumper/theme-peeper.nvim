@@ -1,26 +1,11 @@
 local M = {}
 
-local config = {
-	capture = {},
-	preview = {},
-	cache = {
-		enabled = true,
-	},
-}
-
-function M.setup(opts)
-	config = vim.tbl_deep_extend("force", config, opts or {})
-end
-
-function M.list()
-	local themes = vim.fn.getcompletion("", "color")
-	table.sort(themes)
-
-	return themes
+local function config()
+	return require("theme_peeper.config").get()
 end
 
 local function notify_error(message)
-	vim.notify(message, vim.log.levels.ERROR)
+	vim.notify(tostring(message), vim.log.levels.ERROR)
 end
 
 local function notify_no_themes()
@@ -28,12 +13,12 @@ local function notify_no_themes()
 end
 
 local function capture_without_cache(theme)
-	return require("theme_peeper.capture").theme(theme, config.capture)
+	return require("theme_peeper.capture").theme(theme, config().capture)
 end
 
 local function capture_with_cache(theme)
 	local cache = require("theme_peeper.cache")
-	local cached = cache.get(theme, config.capture)
+	local cached = cache.get(theme, config().capture)
 
 	if cached then
 		return cached, nil
@@ -45,17 +30,60 @@ local function capture_with_cache(theme)
 		return nil, err
 	end
 
-	cache.set(theme, config.capture, captured)
+	cache.set(theme, config().capture, captured)
 
 	return captured, nil
 end
 
 local function should_use_cache(opts)
-	return opts.cache ~= false and config.cache.enabled
+	return opts.cache ~= false and config().cache.enabled
 end
 
-local function merged_preview_opts(opts)
-	return vim.tbl_deep_extend("force", config.preview, opts or {})
+local function merged_float_opts(opts)
+	return vim.tbl_deep_extend("force", config().preview, opts or {})
+end
+
+local function configured_apply()
+	local apply = config().apply
+
+	if type(apply) ~= "function" then
+		return nil, "Theme Peeper apply must be a function"
+	end
+
+	return apply, nil
+end
+
+local function apply_theme(theme)
+	local apply, err = configured_apply()
+
+	if not apply then
+		notify_error(err)
+		return false
+	end
+
+	local ok, apply_err = pcall(apply, theme)
+
+	if not ok then
+		notify_error(apply_err)
+		return false
+	end
+
+	return true
+end
+
+function M.setup(opts)
+	require("theme_peeper.config").setup(opts or {})
+end
+
+function M.config()
+	return config()
+end
+
+function M.list()
+	local themes = vim.fn.getcompletion("", "color")
+	table.sort(themes)
+
+	return themes
 end
 
 function M.capture(theme, opts)
@@ -68,42 +96,59 @@ function M.capture(theme, opts)
 	return capture_without_cache(theme)
 end
 
-function M.open(captured)
-	require("theme_peeper.preview").open(captured, config.preview)
+function M.actions()
+	return require("theme_peeper.actions").new(config())
+end
+
+function M.open(captured, opts)
+	return require("theme_peeper.previewers.float").open(captured, merged_float_opts(opts))
 end
 
 function M.close()
-	require("theme_peeper.preview").close()
+	require("theme_peeper.previewers").close()
+end
+
+function M.apply(theme)
+	if not theme or theme == "" then
+		notify_error("Missing colorscheme")
+		return false
+	end
+
+	return apply_theme(theme)
+end
+
+function M.confirm(theme, opts)
+	opts = opts or {}
+
+	if opts.close_preview ~= false then
+		M.close()
+	end
+
+	return M.apply(theme)
 end
 
 function M.preview(theme, opts)
 	opts = opts or {}
 
-	M.close()
+	if not theme or theme == "" then
+		return nil, "Missing colorscheme"
+	end
 
-	local captured, err = M.capture(theme, {
-		cache = opts.cache,
-	})
+	local previewed, err = require("theme_peeper.previewers").preview(M.actions(), theme, opts)
 
-	if not captured then
+	if not previewed then
 		return nil, err
 	end
 
-	require("theme_peeper.preview").open(captured, merged_preview_opts(opts))
-
-	return captured, nil
-end
-
-function M.browse()
-	require("theme_peeper.browser").open(M.list())
+	return true, nil
 end
 
 function M.peek(theme)
-	local _, err = M.preview(theme, {
+	local ok, err = M.preview(theme, {
 		cache = true,
 	})
 
-	if err then
+	if not ok and err then
 		notify_error(err)
 	end
 end
@@ -116,44 +161,7 @@ function M.select()
 		return
 	end
 
-	vim.ui.select(themes, {
-		prompt = "Select colorscheme",
-	}, function(theme)
-		if not theme then
-			return
-		end
-
-		M.peek(theme)
-	end)
-end
-
-function M.debug(theme)
-	M.close()
-
-	local captured, err = M.capture(theme, {
-		cache = false,
-	})
-
-	if not captured then
-		notify_error(err)
-		return
-	end
-
-	require("theme_peeper.debug").open(captured)
-end
-
-function M.clear_cache()
-	require("theme_peeper.cache").clear()
-	vim.notify("Theme Peeper cache cleared")
-end
-
-function M.cache_info()
-	local info = require("theme_peeper.cache").info()
-
-	vim.notify(table.concat({
-		"Theme Peeper cache",
-		"entries: " .. info.entries,
-	}, "\n"))
+	return require("theme_peeper.pickers").open(config(), M.actions())
 end
 
 return M

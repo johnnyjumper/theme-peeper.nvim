@@ -7,7 +7,11 @@ local function complete_colorschemes()
 end
 
 local function create_command(name, callback, opts)
-	vim.api.nvim_create_user_command(name, callback, opts or {})
+	opts = vim.tbl_extend("force", {
+		force = true,
+	}, opts or {})
+
+	vim.api.nvim_create_user_command(name, callback, opts)
 end
 
 local colorscheme_arg = {
@@ -15,26 +19,10 @@ local colorscheme_arg = {
 	complete = complete_colorschemes,
 }
 
-create_command("ThemePeep", function(opts)
-	theme_peeper().peek(opts.args)
-end, colorscheme_arg)
-
-create_command("ThemePeepSelect", function()
+create_command("ThemePeep", function()
 	theme_peeper().select()
 end)
 
-create_command("ThemePeeperDebug", function(opts)
-	theme_peeper().debug(opts.args)
+create_command("ThemePeepPreview", function(opts)
+	theme_peeper().peek(opts.args)
 end, colorscheme_arg)
-
-create_command("ThemePeeperCacheClear", function()
-	theme_peeper().clear_cache()
-end)
-
-create_command("ThemePeeperCacheInfo", function()
-	theme_peeper().cache_info()
-end)
-
-create_command("ThemePeepBrowse", function()
-	theme_peeper().browse()
-end)
