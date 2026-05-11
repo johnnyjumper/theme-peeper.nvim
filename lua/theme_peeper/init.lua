@@ -71,8 +71,28 @@ local function apply_theme(theme)
 	return true
 end
 
+local function persist_theme(theme)
+	local ok, err = require("theme_peeper.persist").write(theme, config().persist)
+
+	if not ok then
+		notify_error(err)
+		return false
+	end
+
+	return true
+end
+
+local function sync_persisted_theme()
+	local ok, err = require("theme_peeper.persist").sync(config().persist, apply_theme)
+
+	if not ok and err then
+		notify_error(err)
+	end
+end
+
 function M.setup(opts)
 	require("theme_peeper.config").setup(opts or {})
+	sync_persisted_theme()
 end
 
 function M.config()
@@ -114,7 +134,11 @@ function M.apply(theme)
 		return false
 	end
 
-	return apply_theme(theme)
+	if not apply_theme(theme) then
+		return false
+	end
+
+	return persist_theme(theme)
 end
 
 function M.confirm(theme, opts)

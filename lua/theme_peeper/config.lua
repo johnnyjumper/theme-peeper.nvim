@@ -34,6 +34,10 @@ local defaults = {
 	},
 	picker = "builtin",
 	previewer = "float",
+	persist = {
+		enabled = false,
+		path = nil,
+	},
 	pickers = {
 		builtin = {
 			max_height = 12,
@@ -69,12 +73,32 @@ local function normalized_previewer(opts)
 	return opts.previewer
 end
 
+local function normalized_persist(opts)
+	if opts.persist == true then
+		return {
+			enabled = true,
+			path = nil,
+		}
+	end
+
+	if opts.persist == false or opts.persist == nil then
+		return vim.deepcopy(defaults.persist)
+	end
+
+	if type(opts.persist) == "table" then
+		return vim.tbl_deep_extend("force", vim.deepcopy(defaults.persist), opts.persist)
+	end
+
+	return vim.deepcopy(defaults.persist)
+end
+
 function M.setup(opts)
 	opts = opts or {}
 
 	current = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
 	current.picker = normalized_picker(opts)
 	current.previewer = normalized_previewer(opts)
+	current.persist = normalized_persist(opts)
 end
 
 function M.get()

@@ -17,6 +17,7 @@ Live-preview Neovim colorschemes before applying them.
 - Uses your current `runtimepath`, `background`, `termguicolors`, and safe scalar globals
 - Configurable preview profiles
 - Custom preview sample lines, spans, and highlight groups
+- Optional persistent theme selection
 - Custom apply function
 - Custom picker support
 - Custom previewer support
@@ -40,9 +41,12 @@ Optional:
 
 This is the intended setup. Snacks gives Theme Peeper the best live-preview experience because the preview updates as you move through the picker.
 
+This setup also enables persistent theme selection, so the confirmed theme is restored the next time Neovim starts.
+
 ```lua
 {
   "JohnnyJumper/theme-peeper.nvim",
+  lazy = false,
   dependencies = {
     {
       "folke/snacks.nvim",
@@ -63,6 +67,8 @@ This is the intended setup. Snacks gives Theme Peeper the best live-preview expe
   opts = {
     picker = "snacks",
     previewer = "float",
+
+    persist = true,
 
     preview = {
       profile = "code",
@@ -90,6 +96,7 @@ Theme Peeper also works without extra dependencies by using `vim.ui.select`.
 ```lua
 {
   "JohnnyJumper/theme-peeper.nvim",
+  lazy = false,
   keys = {
     {
       "<leader>tp",
@@ -142,10 +149,10 @@ require("theme_peeper").apply("kanagawa")
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `:ThemePeep` | Open the configured theme picker |
-| `:ThemePeepPreview <theme>` | Preview a specific colorscheme |
+| Command                     | Description                      |
+| --------------------------- | -------------------------------- |
+| `:ThemePeep`                | Open the configured theme picker |
+| `:ThemePeepPreview <theme>` | Preview a specific colorscheme   |
 
 ## Picker backends
 
@@ -212,6 +219,11 @@ require("theme_peeper").setup({
   picker = "snacks",
   previewer = "float",
 
+  persist = {
+    enabled = true,
+    path = vim.fn.stdpath("data") .. "/theme-peeper/theme.json",
+  },
+
   apply = function(theme)
     vim.cmd.colorscheme(theme)
   end,
@@ -275,6 +287,52 @@ require("theme_peeper").setup({
 })
 ```
 
+## Persistent theme
+
+Theme persistence is disabled by default.
+
+Enable it with:
+
+```lua
+require("theme_peeper").setup({
+  persist = true,
+})
+```
+
+With `persist = true`, Theme Peeper writes the confirmed theme to:
+
+```lua
+vim.fn.stdpath("data") .. "/theme-peeper/theme.json"
+```
+
+Use the expanded form to configure the path:
+
+```lua
+require("theme_peeper").setup({
+  persist = {
+    enabled = true,
+    path = vim.fn.stdpath("data") .. "/theme-peeper/theme.json",
+  },
+})
+```
+
+Startup behavior:
+
+1. If a persisted theme exists, Theme Peeper applies it.
+2. If no persisted theme exists, Theme Peeper stores the currently active colorscheme.
+3. Previewed themes are not persisted.
+4. Only confirmed or directly applied themes are persisted.
+
+Disable persistence explicitly:
+
+```lua
+require("theme_peeper").setup({
+  persist = {
+    enabled = false,
+  },
+})
+```
+
 ## Preview profiles
 
 Theme Peeper includes built-in preview profiles.
@@ -289,12 +347,12 @@ require("theme_peeper").setup({
 
 Available profiles:
 
-| Profile | Description |
-|---|---|
-| `code` | General code-oriented preview |
-| `diagnostics` | Diagnostics and code sample preview |
-| `ui` | UI highlight groups such as floats, menus, statusline, separators, and line numbers |
-| `minimal` | Compact preview |
+| Profile       | Description                                                                         |
+| ------------- | ----------------------------------------------------------------------------------- |
+| `code`        | General code-oriented preview                                                       |
+| `diagnostics` | Diagnostics and code sample preview                                                 |
+| `ui`          | UI highlight groups such as floats, menus, statusline, separators, and line numbers |
+| `minimal`     | Compact preview                                                                     |
 
 Example:
 
@@ -390,7 +448,9 @@ require("theme_peeper").setup({
 })
 ```
 
-This is useful when applying a theme also needs to update plugin state, persist a config value, or refresh UI components.
+This is useful when applying a theme also needs to update plugin state or refresh UI components.
+
+If `persist` is enabled, Theme Peeper persists the theme after `apply` succeeds.
 
 ## Capture behavior
 
@@ -504,11 +564,11 @@ require("theme_peeper").setup({
 
 Supported placement values:
 
-| Placement | Description |
-|---|---|
-| `center` | Center the preview in the editor |
+| Placement  | Description                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------- |
+| `center`   | Center the preview in the editor                                                                      |
 | `attached` | Attach the preview to an anchor, placing it below when there is space and beside it when there is not |
-| `below` | Use anchor-based placement; currently follows the same auto-fit behavior as `attached` |
+| `below`    | Use anchor-based placement; currently follows the same auto-fit behavior as `attached`                |
 
 Picker integrations may override placement internally to keep the picker and preview visually connected.
 
@@ -604,10 +664,10 @@ require("theme_peeper").setup({
 
 A custom picker receives:
 
-| Argument | Description |
-|---|---|
+| Argument  | Description             |
+| --------- | ----------------------- |
 | `actions` | Theme Peeper action API |
-| `opts` | Picker options |
+| `opts`    | Picker options          |
 
 Available actions:
 
@@ -648,15 +708,15 @@ require("theme_peeper").setup({
 
 A custom previewer receives:
 
-| Field | Description |
-|---|---|
-| `ctx.theme` | Theme name being previewed |
-| `ctx.captured` | Captured highlight data |
-| `ctx.opts` | Merged preview options |
-| `ctx.actions` | Theme Peeper action API |
-| `ctx.render` | Renderer function |
-| `ctx.buf` | Optional buffer passed by caller |
-| `ctx.win` | Optional window passed by caller |
+| Field          | Description                      |
+| -------------- | -------------------------------- |
+| `ctx.theme`    | Theme name being previewed       |
+| `ctx.captured` | Captured highlight data          |
+| `ctx.opts`     | Merged preview options           |
+| `ctx.actions`  | Theme Peeper action API          |
+| `ctx.render`   | Renderer function                |
+| `ctx.buf`      | Optional buffer passed by caller |
+| `ctx.win`      | Optional window passed by caller |
 
 ## Lua API
 
@@ -667,6 +727,7 @@ Configure the plugin.
 ```lua
 require("theme_peeper").setup({
   picker = "snacks",
+  persist = true,
 })
 ```
 
@@ -711,6 +772,8 @@ Apply a theme using the configured apply function.
 require("theme_peeper").apply("kanagawa")
 ```
 
+If persistence is enabled, `apply()` also saves the applied theme.
+
 ### `confirm(theme, opts)`
 
 Close the preview and apply a theme.
@@ -726,6 +789,8 @@ require("theme_peeper").confirm("kanagawa", {
   close_preview = false,
 })
 ```
+
+If persistence is enabled, `confirm()` saves the confirmed theme.
 
 ### `capture(theme, opts)`
 
@@ -766,6 +831,20 @@ Then try:
 ```vim
 :ThemePeepPreview exact-theme-name
 ```
+
+### Theme persistence does not work
+
+Make sure persistence is enabled:
+
+```lua
+require("theme_peeper").setup({
+  persist = true,
+})
+```
+
+Only confirmed or directly applied themes are saved. Moving through the picker only previews themes and does not update the persisted theme.
+
+If you configured a custom path, make sure its parent directory is writable.
 
 ### Theme preview does not match the applied theme
 
@@ -813,6 +892,8 @@ Instead, it:
 5. Renders the preview using an isolated highlight namespace
 
 The selected theme is only applied when you confirm it.
+
+If persistence is enabled, the confirmed theme is saved and restored on the next Neovim startup.
 
 ## License
 
